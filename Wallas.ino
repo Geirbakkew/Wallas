@@ -20,12 +20,13 @@ Adafruit_MAX31855 thermocouple(MAXCLK, MAXCS, MAXDO);
 
 
 //Definer variabler
-unsigned long warmup_time = 270000; // time the Heaplugg are turnd on
-unsigned long FanDry_time = 8000; //Time the fan should run to ventilate the heat chamber
+int Firstrun = 1;
+unsigned long warmup_time = 300000; // time the Heaplugg are turnd on
+unsigned long FanDry_time = 30000; //Time the fan should run to ventilate the heat chamber
+unsigned long MiniumCoolDown_time = 180000; //Time the fan should run to ventilate the heat chamber
 
-int RunningTemperatur = 250; //Temperature off fire indicates the burning are OK
-int CoolDownTemperatur = 40; //Temperature Cooldown sequence OK
-
+int RunningTemperatur = 650; //Temperature fire indicates the burning are OK (messurement not correct, one wire reading.)
+int CoolDownTemperatur = 50; //Temperature Cooldown sequence OK (messurement not correct, one wire reading.)
 
 // On and Off Times (as int, max=32secs)
 const unsigned int PumpPulseTime = 150;
@@ -78,17 +79,6 @@ if (CooldownSequenceActive == 1 || OverHeatStatus == 1){
  // Serial.println(OverHeatStatus);
   return;
 }
-
-
-//Serial.println("StartHeater()");
-//Serial.println(StartBTNPressedMillis);
-
-//Serial.print("warmup_time: ");
-//Serial.println(warmup_time);
-//Serial.print("StartSequenceFinish: ");
-//Serial.println(StartSequenceFinish);
-//Serial.print("CooldownSequenceActive: ");
-//Serial.println(CooldownSequenceActive);
   
   // Compare to BTNPressed time to see if enough time has passed
   if (((unsigned long)((millis() - StartBTNPressedMillis) <= warmup_time)) && StartSequenceFinish == 0 && CooldownSequenceActive == 0) {
@@ -96,13 +86,13 @@ if (CooldownSequenceActive == 1 || OverHeatStatus == 1){
       //Serial.println("HeatRun(1)");
       HeatRun(1);
       if(DryBurnerComplete == 1) {
-        digitalWrite(HeatPlug_PIN, 1);  //Activate Heatplugg relay
+        digitalWrite(HeatPlug_PIN, 1);  //Activate Heatplugg
       }
       }
       }  
      else  
       {
-          digitalWrite(HeatPlug_PIN, 0);  // Update the actual LED
+          digitalWrite(HeatPlug_PIN, 0);  // DeActivate Heatplugg
           //Serial.println("Heat Sequence finish");
           StartSequenceFinish = 1;    
       }
@@ -112,20 +102,21 @@ void CoolDown(){
 //Serial.print("CooldownSequenceActive: ");
 //Serial.println(CooldownSequenceActive);
 
-
-
+if(Firstrun == 1){
+  Serial.println("Firstrun");
+  CooldownSequenceActive=0;
+}
 
   if(CooldownSequenceActive == 1){
   Serial.println("Stop Pump! ");
   digitalWrite(Pump_PIN, 1);  // Stop Pump'
-  digitalWrite(HeatPlug_PIN, 0);  //Stop heatplugg
+  digitalWrite(HeatPlug_PIN, 0);  //DeActivate Heatplugg
   FanSpeed=255;
   analogWrite(Fan_PIN,FanSpeed); //set fanspeed to max to cooldown fast
   Serial.println("Vifte Kjører full hastighet");
    //Serial.println("Cooldown StartSequenceFinish to 0: ");
   StartSequenceFinish = 0;
   DryBurnerComplete = 0;
-
 }
 
 }
@@ -146,7 +137,8 @@ if (CooldownSequenceActive == 1 || OverHeatStatus == 1){
    // Read PotValue and adjust time accordenly
     PumpPotVal = analogRead(PumpPotPin);    // read the value from the sensor
     PumpWaitTime = PumpWaitStdTime + PumpPotVal - 500;
-
+    Serial.println(PumpPotVal);
+    
 if (((unsigned long)((millis() - StartBTNPressedMillis) <= FanDry_time)) && x == 1) {
    
   //kjør vifte ved oppstart før fuel
@@ -164,17 +156,18 @@ if (StartSequenceFinish == 1){
    // Read Status Effekt Button, if on set value to 50%
   EffektButtonState = digitalRead(EffektBTN_PIN);
     if (EffektButtonState == 0){
+      Serial.println("Lav efekt");
     PumpWaitTime = (PumpWaitTime * 1.5);
     FanSpeed=255*0.7;
     } 
 }else{
-  FanSpeed=255; //kjører max vifte i oppstart
+  FanSpeed=255;
 }
 
  // Serial.println("Heat Run");
 
 //Justering hastighet + (ikke hvis lav effet er aktivert.
-if(EffektButtonState == 1) {
+/**if(EffektButtonState == 1) {
 
 // Read PotControlValue and adjust % lower
     
@@ -183,6 +176,7 @@ if(EffektButtonState == 1) {
 
     //Pump adjust % lower
     PumpPotControlVal = ((1-((PumpPotControlVal+1)/2048)*2)+1);
+    Serial.println(PumpPotControlVal);
     float z = PumpWaitTime * PumpPotControlVal;
     int a = (int) round (z);
     PumpWaitTime = a;
@@ -197,8 +191,8 @@ if(EffektButtonState == 1) {
 //Vifte må styres tilsvarende effekt /Se på om det kan gjøres ulinjært
 
 }
-
-
+*/
+ FanSpeed=255;
   analogWrite(Fan_PIN,FanSpeed); //Run Fan
   
   // Set Pin 13 to state of PumpState each timethrough loop()
@@ -235,14 +229,22 @@ void TempControl(){
 
 OverHeatSensorActive = digitalRead(OverHeatSensor_PIN); //read overheatsensor normal closed
 
-
 //endre etter start
 if(OverHeatSensorActive == 0) {
-  Serial.println("Overheat Active");
-OverHeatStatus=1;
-CooldownSequenceActive = 1;
+ Serial.println("Overheat Active");
+ OverHeatStatus=1;
+ CooldownSequenceActive = 1;
 return;
   
+}
+
+
+
+if (((unsigned long)((millis() - StartBTNPressedMillis) <=  MiniumCoolDown_time)) && CooldownSequenceActive == 1) {
+ //runs Coocldown for minimum time
+ Serial.print("Cooldown timer:");
+ Serial.println((unsigned long)((millis() - StartBTNPressedMillis)));
+return;
 }
 
 //--------------------------------------------------------------------------
@@ -256,21 +258,21 @@ return;
 
 //--------------------------------------------------------------------------
 
+// Check if temp are below set point
+if(MessuredTemp <= CoolDownTemperatur && CooldownSequenceActive == 1){
 
-//sjekk temp sensor ikke mottatt enda før aktivering av denne.
-//Serial.println("Cooldown finish:");
-
-if(MessuredTemp <= CoolDownTemperatur || CooldownSequenceActive == 1){
-
-  FanSpeed=0; 
-  analogWrite(Fan_PIN,FanSpeed); //Stop fan
-  CooldownSequenceActive = 0;
-
-  
+Serial.println("CoolDownFinish");
+FanSpeed=0; 
+analogWrite(Fan_PIN,FanSpeed); //Stop fan
+CooldownSequenceActive = 0;
 }
 
-CooldownSequenceActive = 0;
-  
+
+if (StartSequenceFinish == 1){
+
+  //Check temp of Termocoulper stop if i drops bellow.
+}
+
 }
 
 // Usual Setup Stuff
@@ -296,11 +298,11 @@ void setup() {
     while (1) delay(10);
   }
   Serial.println("DONE.");
-
   
 }
  
 void loop() {
+
 
   TempControl();
   CoolDown();
@@ -338,4 +340,5 @@ void loop() {
       HeatRun(2);
     }
  } 
+ Firstrun = 0; //set Firstrun to 0
 }
