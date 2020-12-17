@@ -30,6 +30,8 @@ unsigned long MiniumCoolDown_time = 180000; //Time the fan should run to ventila
 
 int RunningTemperatur = 650; //Temperature fire indicates the burning are OK (messurement not correct, one wire reading.)
 int CoolDownTemperatur = 50; //Temperature Cooldown sequence OK (messurement not correct, one wire reading.)
+int StartTimes = 0; //Tracks how many times start has been tested.
+int MaxStartTimes = 2; //How many times start prosess should run..
 
 // On and Off Times (as int, max=32secs)
 const unsigned int PumpPulseTime = 150;
@@ -270,16 +272,18 @@ return;
 // Check if temp are below set point
 if(MessuredTemp <= CoolDownTemperatur && CooldownSequenceActive == 1){
 
-//Serial.println("CoolDownFinish");
-FanSpeed=0; 
-analogWrite(Fan_PIN,FanSpeed); //Stop fan
-CooldownSequenceActive = 0;
+  //Serial.println("CoolDownFinish");
+  FanSpeed=0; 
+  analogWrite(Fan_PIN,FanSpeed); //Stop fan
+  CooldownSequenceActive = 0;
 }
 
 
-if (StartSequenceFinish == 1){
+if (StartSequenceFinish == 1 && MessuredTemp < RunningTemperatur){
 
-  //Check temp of Termocoulper stop if i drops bellow.
+  //Check temp of Termocoulper, stop if i drops bellow.
+  CooldownSequenceActive = 1;
+ 
 }
 
 }
@@ -332,12 +336,15 @@ void loop() {
     //Serial.println("CoolDown aktivert");
     CooldownSequenceActive=1;
     CoolDown();
+    StartTimes = 0;
     if(OverHeatStatus == 1) {
       //Serial.println("OverheatStatus = 0");
       OverHeatStatus = 0;
     }
     }
-
+    if(StartButtonState == 0){
+      StartTimes=StartTimes + 1; //Add StartTimes
+    }
     LastStartButtonState = StartButtonState;
 
  }
@@ -345,10 +352,13 @@ void loop() {
  if(StartButtonState == 0){
   //Serial.println("StartHeater");
   //Serial.println(StartButtonState);
-    StartHeater();
-    if (StartSequenceFinish == 1) {
-      HeatRun(2);
+    If(StartTimes >=MaxStartTimes){
+      StartHeater();
+        if (StartSequenceFinish == 1) {
+          HeatRun(2);
+        }      
     }
+
  } 
  Firstrun = 0; //set Firstrun to 0
 }
