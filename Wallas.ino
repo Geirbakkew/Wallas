@@ -10,7 +10,7 @@
 #define OverHeatSensor_PIN 2
 #define RunningLed_PIN 17
 #define ErrorLed_PIN 19
-
+#define LeakDetector_PIN 11
 
 
 // Thermocouple digital IO pins.
@@ -26,10 +26,10 @@ Adafruit_MAX31855 thermocouple(MAXCLK, MAXCS, MAXDO);
 int Firstrun = 1;
 unsigned long warmup_time = 300000; // time the Heaplugg are turnd on
 unsigned long FanDry_time = 30000; //Time the fan should run to ventilate the heat chamber
-unsigned long MiniumCoolDown_time = 180000; //Time the fan should run to ventilate the heat chamber
+unsigned long MiniumCoolDown_time = 300000; //Time the fan should run to ventilate the heat chamber
 
 int RunningTemperatur = 650; //Temperature fire indicates the burning are OK (messurement not correct, one wire reading.)
-int CoolDownTemperatur = 50; //Temperature Cooldown sequence OK (messurement not correct, one wire reading.)
+int CoolDownTemperatur = 60; //Temperature Cooldown sequence OK (messurement not correct, one wire reading.)
 int StartTimes = 0; //Tracks how many times start has been tested.
 int MaxStartTimes = 2; //How many times start prosess should run..
 
@@ -48,7 +48,7 @@ float PumpPotControlVal = 0;
 
 //TempControl (Security check)
 int OverHeatSensorActive = 0;
-int OverHeatStatus = 0;
+int ErrorState = 0;
  
 // Interval is how long Pump puls should last
 int interval = PumpPulseTime;
@@ -76,12 +76,12 @@ int DryBurnerComplete = 0;
 void StartHeater(){
 
 //If cooldown active or overheat triggerd
-if (CooldownSequenceActive == 1 || OverHeatStatus == 1){
+if (CooldownSequenceActive == 1 || ErrorState == 1){
  // Serial.print("CooldownSequenceActive: ");
  // Serial.println(CooldownSequenceActive);
  // Serial.println("---");
-  Serial.print("StarHeaterOverHeatStatus: ");
-  Serial.println(OverHeatStatus);
+  Serial.print("StarHeaterErrorState: ");
+  Serial.println(ErrorState);
  // return;
 }
   
@@ -119,7 +119,7 @@ if(Firstrun == 1){
   digitalWrite(HeatPlug_PIN, 0);  //DeActivate Heatplugg
   FanSpeed=255;
   analogWrite(Fan_PIN,FanSpeed); //set fanspeed to max to cooldown fast
-  //Serial.println("Vifte Kjører full hastighet");
+  //Serial.println("Vifte KjÃ¸rer full hastighet");
    //Serial.println("Cooldown StartSequenceFinish to 0: ");
   StartSequenceFinish = 0;
   DryBurnerComplete = 0;
@@ -130,12 +130,12 @@ if(Firstrun == 1){
 void HeatRun(int x){
 
 //If cooldown active or overheat triggerd
-if (CooldownSequenceActive == 1 || OverHeatStatus == 1){
+if (CooldownSequenceActive == 1 || ErrorState == 1){
   //Serial.print("CooldownSequenceActive: ");
   //Serial.println(CooldownSequenceActive);
   //Serial.println("---");
-  //Serial.print("OverHeatStatus: ");
-  //Serial.println(OverHeatStatus);
+  //Serial.print("ErrorState: ");
+  //Serial.println(ErrorState);
   return;
 }
 
@@ -147,7 +147,7 @@ if (CooldownSequenceActive == 1 || OverHeatStatus == 1){
     
 if (((unsigned long)((millis() - StartBTNPressedMillis) <= FanDry_time)) && x == 1) {
    
-  //kjør vifte ved oppstart før fuel
+  //kjÃ¸r vifte ved oppstart fÃ¸r fuel
    FanSpeed=255;
    analogWrite(Fan_PIN,FanSpeed);
    //Serial.println("Fan Runs Ventilation");
@@ -158,7 +158,7 @@ if (((unsigned long)((millis() - StartBTNPressedMillis) <= FanDry_time)) && x ==
 
 
 if (StartSequenceFinish == 1){
-   //Sjekk om start er ok og om bryter er slått på
+   //Sjekk om start er ok og om bryter er slÃ¥tt pÃ¥
    // Read Status Effekt Button, if on set value to 50%
   EffektButtonState = digitalRead(EffektBTN_PIN);
     if (EffektButtonState == 0){
@@ -192,13 +192,13 @@ if(EffektButtonState == 1) {
     float y = 255 / PumpPotControlVal;
     int b = (int) round (y);
     FanSpeed=b;
-    Serial.print("FanSpeed: ");
-    Serial.println(FanSpeed);
+    //Serial.print("FanSpeed: ");
+    //Serial.println(FanSpeed);
 
 
    // Serial.println("Effekt redusert");
 
-//Vifte må styres tilsvarende effekt /Se på om det kan gjøres ulinjært
+//Vifte mÃ¥ styres tilsvarende effekt /Se pÃ¥ om det kan gjÃ¸res ulinjÃ¦rt
 
 }
 
@@ -243,7 +243,7 @@ OverHeatSensorActive = digitalRead(OverHeatSensor_PIN); //read overheatsensor no
 //endre etter start
 if(OverHeatSensorActive == 1) {
  //Serial.println("Overheat Active");
- OverHeatStatus=1;
+ ErrorState=1;
  CooldownSequenceActive = 1;
 return;
   
@@ -279,13 +279,13 @@ if(MessuredTemp <= CoolDownTemperatur && CooldownSequenceActive == 1){
 }
 
 
-if (StartSequenceFinish == 1 && MessuredTemp < RunningTemperatur){
+/*if (StartSequenceFinish == 1 && MessuredTemp < RunningTemperatur){
 
   //Check temp of Termocoulper, stop if i drops bellow.
   CooldownSequenceActive = 1;
  
 }
-
+*/
 }
 
 // Usual Setup Stuff
@@ -298,9 +298,12 @@ void setup() {
   pinMode(HeatPlug_PIN, OUTPUT);
   pinMode(Fan_PIN, OUTPUT);
   pinMode(RunningLed_PIN, OUTPUT);
+    digitalWrite(RunningLed_PIN, 1);  // Turn off Led
   pinMode(ErrorLed_PIN, OUTPUT);
+    digitalWrite(RunningLed_PIN, 1);  // Turn off Led
   pinMode(StartBTN_PIN, INPUT_PULLUP);
   pinMode(EffektBTN_PIN, INPUT_PULLUP);
+  pinMode(LeakDetector_PIN, INPUT);
   pinMode(OverHeatSensor_PIN, INPUT_PULLUP);
   analogWrite(Fan_PIN, 0);
   TCCR1B = TCCR1B & B11111000 | B00000101;    // set timer 1 divisor to  1024 for PWM frequency of    30.64 Hz
@@ -321,8 +324,15 @@ void loop() {
   TempControl();
   CoolDown();
 
-//Serial.print("Overoppheting:");
-//Serial.println(OverHeatStatus);
+//Check for parafin leak
+if (digitalRead(LeakDetector_PIN) == 1){
+ Serial.println("Leak Detected");
+ ErrorState=1;
+ CooldownSequenceActive = 1;
+}
+
+
+
   
  StartButtonState = digitalRead(StartBTN_PIN); //read on/off button
 
@@ -337,9 +347,9 @@ void loop() {
     CooldownSequenceActive=1;
     CoolDown();
     StartTimes = 0;
-    if(OverHeatStatus == 1) {
-      //Serial.println("OverheatStatus = 0");
-      OverHeatStatus = 0;
+    if(ErrorState == 1) {
+      //Serial.println("ErrorState = 0");
+      ErrorState = 0;
     }
     }
     if(StartButtonState == 0){
@@ -352,7 +362,7 @@ void loop() {
  if(StartButtonState == 0){
   //Serial.println("StartHeater");
   //Serial.println(StartButtonState);
-    If(StartTimes >=MaxStartTimes){
+    if(StartTimes <=MaxStartTimes){
       StartHeater();
         if (StartSequenceFinish == 1) {
           HeatRun(2);
